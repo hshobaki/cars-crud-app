@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cars Inventory CRUD</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 1400px; margin: 0 auto; padding: 20px; background: #f5f5f5; }
+        h1 { color: #333; margin-bottom: 30px; text-align: center; }
+        .form-container { background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        .form-row { display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 20px; }
+        input { flex: 1; padding: 12px; border: 2px solid #ddd; border-radius: 5px; font-size: 16px; min-width: 200px; }
+        input:focus { outline: none; border-color: #007bff; }
+        button { padding: 12px 24px; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; font-weight: bold; transition: all 0.3s; }
+        .btn-primary { background: #007bff; color: white; }
+        .btn-primary:hover { background: #0056b3; }
+        .btn-danger { background: #dc3545; color: white; }
+        .btn-danger:hover { background: #c82333; }
+        .btn-success { background: #28a745; color: white; padding: 8px 16px; font-size: 14px; }
+        .btn-success:hover { background: #218838; }
+        .btn-primary:disabled, .btn-primary:disabled:hover { background: #6c757d; cursor: not-allowed; }
+        select { padding: 12px; border: 2px solid #ddd; border-radius: 5px; font-size: 16px; background: white; }
+        table { width: 100%; background: white; border-radius: 10px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        th { background: #007bff; color: white; padding: 15px; text-align: left; }
+        td { padding: 15px; border-bottom: 1px solid #eee; }
+        tr:hover { background: #f8f9fa; }
+        .hidden { display: none; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .controls { background: white; padding: 20px; border-radius: 10px; margin-bottom: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .controls div { display: flex; gap: 15px; flex-wrap: wrap; align-items: center; justify-content: center; }
+        .pagination-info { text-align: center; padding: 20px; color: #666; font-size: 14px; }
+        @media (max-width: 768px) { 
+            .form-row, .controls div { flex-direction: column; } 
+            input, select { min-width: 100%; }
+        }
+    </style>
+</head>
+<body>
+    <h1>🚗 Cars Inventory Management</h1>
+    
+    <div id="status" class="status hidden"></div>
+    
+    <div class="form-container">
+        <form id="carForm">
+            <input type="hidden" id="carId">
+            <div class="form-row">
+                <input type="text" id="make" placeholder="Make (e.g., Toyota)" required>
+                <input type="text" id="model" placeholder="Model (e.g., Camry)" required>
+            </div>
+            <div class="form-row">
+                <input type="number" id="year" placeholder="Year (e.g., 2023)" min="1900" max="2026" required>
+                <input type="number" id="price" placeholder="Price (e.g., 25000)" step="0.01" min="0" required>
+            </div>
+            <div class="form-row">
+                <button type="submit" class="btn-primary">➕ Add New Car</button>
+                <button type="button" id="cancelEdit" class="btn-danger hidden">❌ Cancel Edit</button>
+                <button type="button" id="insert10Cars" class="btn-primary" style="padding: 12px 30px;">
+                    🚗 Insert 10 Random Cars
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Controls -->
+    <div class="controls">
+        <div>
+            <input type="text" id="searchInput" placeholder="🔍 Search make/model...">
+            <select id="sortSelect">
+                <option value="make">Make</option>
+                <option value="model">Model</option>
+                <option value="year">Year</option>
+                <option value="price">Price</option>
+                <option value="created_at" selected>Newest</option>
+            </select>
+            <select id="orderSelect">
+                <option value="asc">↑ A-Z / Low-High</option>
+                <option value="desc" selected>↓ Z-A / High-Low</option>
+            </select>
+            <div style="display: flex; gap: 10px;">
+                <select id="pageSize">
+                    <option value="10">10 per page</option>
+                    <option value="25">25 per page</option>
+                    <option value="50">50 per page</option>
+                    <option value="100">100 per page</option>
+                </select>
+                <button id="prevPage" class="btn-primary" style="padding: 12px 20px;">← Prev</button>
+                <span id="pageInfo" style="padding: 12px; font-weight: bold;"></span>
+                <button id="nextPage" class="btn-primary" style="padding: 12px 20px;">Next →</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Table -->
+    <table id="carsTable">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Make</th>
+                <th>Model</th>
+                <th>Year</th>
+                <th>Price</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody id="carsBody"></tbody>
+    </table>
+
+    <!-- Pagination Info -->
+    <div id="paginationInfo" class="pagination-info"></div>
+
+    <script>
+        const API_URL = 'http://localhost:3000/api/cars';
+        const form = document.getElementById('carForm');
+        const tableBody = document.getElementById('carsBody');
+        const cancelBtn = document.getElementById('cancelEdit');
+        const statusDiv = document.getElementById('status');
+
+        // Paging/Sorting/Search state
+        let currentPage = 1;
+        let pageSize = 10;
+        let searchTerm = '';
+        let sortField = 'created_at';
+        let sortOrder = 'desc';
+
+        // Show status message
+        function showStatus(message, type = 'success') {
+            statusDiv.textContent = message;
+            statusDiv.className = `status ${type}`;
+            statusDiv.classList.remove('hidden');
+            setTimeout(() => statusDiv.classList.add('hidden'), 3000);
+        }
+
+        // Load cars with filters
+        async function loadCars(page = 1) {
+            try {
+                const params = new URLSearchParams({
+                    page,
+                    limit: pageSize,
+                    search: searchTerm,
+                    sort: sortField,
+                    order: sortOrder
+                });
+
+                const response = await fetch(`${API_URL}?${params}`);
+                const data = await response.json();
+                
+                tableBody.innerHTML = '';
+                data.cars.forEach(car => {
+                    const row = tableBody.insertRow();
+                    row.innerHTML = `
+                        <td>${car.id}</td>
+                        <td>${car.make}</td>
+                        <td>${car.model}</td>
+                        <td>${car.year}</td>
+                        <td>$${parseFloat(car.price).toLocaleString()}</td>
+                        <td>
+                            <button onclick="editCar(${car.id})" class="btn-success">✏️ Edit</button>
+                            <button onclick="deleteCar(${car.id})" class="btn-danger">🗑️ Delete</button>
+                        </td>
+                    `;
+                });
+
+                // Update pagination UI
+                updatePaginationUI(data.pagination);
+            } catch (error) {
+                showStatus('Failed to load cars', 'error');
+                console.error('Load cars error:', error);
+            }
+        }
+
+        function updatePaginationUI(pagination) {
+            document.getElementById('pageInfo').textContent = `Page ${pagination.page} of ${pagination.pages}`;
+            document.getElementById('paginationInfo').innerHTML = `
+                Showing ${Math.min((pagination.page - 1) * pagination.limit + 1, pagination.total)}-${Math.min(pagination.page * pagination.limit, pagination.total)} 
+                of ${pagination.totalCars} cars
+            `;
+            
+            document.getElementById('prevPage').disabled = pagination.page === 1;
+            document.getElementById('nextPage').disabled = pagination.page === pagination.pages;
+        }
+
+        // Form submit handler
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const id = document.getElementById('carId').value;
+            const carData = {
+                make: document.getElementById('make').value,
+                model: document.getElementById('model').value,
+                year: parseInt(document.getElementById('year').value),
+                price: parseFloat(document.getElementById('price').value)
+            };
+
+            try {
+                const method = id ? 'PUT' : 'POST';
+                const url = id ? `${API_URL}/${id}` : API_URL;
+                
+                const response = await fetch(url, {
+                    method,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(carData)
+                });
+
+                if (response.ok) {
+                    form.reset();
+                    document.getElementById('carId').value = '';
+                    cancelBtn.classList.add('hidden');
+                    loadCars(currentPage);
+                    showStatus(id ? 'Car updated successfully!' : 'Car added successfully!');
+                } else {
+                    showStatus('Operation failed', 'error');
+                }
+            } catch (error) {
+                showStatus('Network error', 'error');
+                console.error('Submit error:', error);
+            }
+        });
+
+        // Edit car
+        window.editCar = async (id) => {
+            try {
+                const response = await fetch(`${API_URL}/${id}`);
+                if (!response.ok) {
+                    throw new Error(`Server error: ${response.status}`);
+                }
+                const car = await response.json();
+                document.getElementById('carId').value = car.id;
+                document.getElementById('make').value = car.make;
+                document.getElementById('model').value = car.model;
+                document.getElementById('year').value = car.year;
+                document.getElementById('price').value = car.price;
+                cancelBtn.classList.remove('hidden');
+                form.scrollIntoView({ behavior: 'smooth' });
+            } catch (error) {
+                showStatus('Failed to load car data', 'error');
+                console.error('Edit car error:', error);
+            }
+        };
+
+        // Delete car
+        window.deleteCar = async (id) => {
+            if (confirm('Are you sure you want to delete this car?')) {
+                try {
+                    const response = await fetch(`${API_URL}/${id}`, { method: 'DELETE' });
+                    if (response.ok) {
+                        loadCars(currentPage);
+                        showStatus('Car deleted successfully!');
+                    } else {
+                        showStatus('Failed to delete car', 'error');
+                    }
+                } catch (error) {
+                    showStatus('Network error', 'error');
+                }
+            }
+        };
+
+        // Cancel edit
+        cancelBtn.onclick = () => {
+            form.reset();
+            document.getElementById('carId').value = '';
+            cancelBtn.classList.add('hidden');
+        };
+
+        // Insert 10 random cars
+        document.getElementById('insert10Cars').onclick = async () => {
+            try {
+                const response = await fetch(`${API_URL}/bulk`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    showStatus(`${result.count} random cars added! 🚗`, 'success');
+                    loadCars(1); // Go to first page
+                } else {
+                    showStatus('Failed to insert cars', 'error');
+                }
+            } catch (error) {
+                showStatus('Network error', 'error');
+                console.error('Bulk insert error:', error);
+            }
+        };
+
+        // Event listeners for controls
+        document.getElementById('searchInput').oninput = (e) => {
+            searchTerm = e.target.value;
+            currentPage = 1;
+            loadCars();
+        };
+
+        document.getElementById('sortSelect').onchange = (e) => {
+            sortField = e.target.value;
+            currentPage = 1;
+            loadCars();
+        };
+
+        document.getElementById('orderSelect').onchange = (e) => {
+            sortOrder = e.target.value;
+            currentPage = 1;
+            loadCars();
+        };
+
+        document.getElementById('pageSize').onchange = (e) => {
+            pageSize = parseInt(e.target.value);
+            currentPage = 1;
+            loadCars();
+        };
+
+        document.getElementById('prevPage').onclick = () => {
+            if (currentPage > 1) {
+                currentPage--;
+                loadCars(currentPage);
+            }
+        };
+
+        document.getElementById('nextPage').onclick = () => {
+            currentPage++;
+            loadCars(currentPage);
+        };
+
+        // Load cars on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            loadCars();
+        });
+    </script>
+</body>
+</html>
